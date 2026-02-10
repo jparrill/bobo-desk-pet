@@ -1,0 +1,63 @@
+# Bobo - Git Ignore Rules
+
+# ===================================================
+# Go
+# ===================================================
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+vendor/
+
+# ===================================================
+# Build Artifacts (work directory)
+# ===================================================
+/work/
+!/work/.gitkeep
+!/work/README.md
+
+# ===================================================
+# Configuration & Secrets
+# ===================================================
+.env
+.env.local
+.env.production
+gcloud-key.json
+service-account.json
+*-service-account.json
+
+# ===================================================
+# Audio Files
+# ===================================================
+*.wav
+*.mp3
+*.aiff
+desk_pet_recording_*.wav
+test_audio.*
+
+# ===================================================
+# whisper.cpp
+# ===================================================
+*.bin
+*.ggml
+models/ggml-*.bin
+*.txt.tmp
+*.srt
+*.vtt
+
+# ===================================================
+# Development
+# ===================================================
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak

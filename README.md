@@ -51,6 +51,7 @@ Once running, use these commands:
 ## 📚 Documentation
 
 - **[Project Roadmap](docs/ROADMAP.md)** - Vision, phases, and future plans
+- **[Changelog](CHANGELOG.md)** - Release notes and version history
 - **[Setup Guide](docs/setup.md)** - Detailed installation and configuration
 - **[Authentication](docs/authentication.md)** - Google Cloud setup
 - **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions

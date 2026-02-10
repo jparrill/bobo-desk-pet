@@ -158,9 +158,7 @@ clone_whisper_cpp() {
 
 # Build whisper.cpp
 build_whisper_cpp() {
-    if [ "$VERBOSE" = true ]; then
-        echo "🔨 Building whisper.cpp..."
-    fi
+    echo "   🔨 Building whisper.cpp..."
 
     # Save current directory
     local ORIGINAL_DIR="$(pwd)"

@@ -95,15 +95,10 @@ func (a *AudioRecorder) recordWithFFmpeg(ctx context.Context, durationSeconds in
 	recordCtx, cancel := context.WithTimeout(ctx, time.Duration(durationSeconds+2)*time.Second)
 	defer cancel()
 
-	// Build ffmpeg command for macOS
-	args := []string{
-		"-f", "avfoundation",        // macOS audio framework
-		"-i", ":0",                  // MacBook Pro Microphone (index 0)
-		"-t", strconv.Itoa(durationSeconds), // recording duration
-		"-ar", strconv.Itoa(a.config.SampleRate), // sample rate
-		"-ac", strconv.Itoa(a.config.Channels),   // audio channels
-		"-y",                        // overwrite output file
-		a.AudioFilePath,             // output file path
+	// Build ffmpeg command based on platform
+	args := a.buildFFmpegArgs(durationSeconds)
+	if args == nil {
+		return fmt.Errorf("unsupported platform for audio recording")
 	}
 
 	// Execute ffmpeg command
@@ -129,6 +124,82 @@ func (a *AudioRecorder) recordWithFFmpeg(ctx context.Context, durationSeconds in
 	}
 
 	return nil
+}
+
+// buildFFmpegArgs builds platform-specific ffmpeg arguments for audio recording
+func (a *AudioRecorder) buildFFmpegArgs(durationSeconds int) []string {
+	platform := a.detectPlatform()
+	a.logger.Info("🔍 Detecting audio recording setup", "platform", platform)
+
+	// Common arguments
+	args := []string{
+		"-y", // Overwrite output files
+		"-t", strconv.Itoa(durationSeconds), // Duration
+		"-ac", strconv.Itoa(a.config.Channels), // Audio channels
+		"-ar", strconv.Itoa(a.config.SampleRate), // Sample rate
+	}
+
+	// Platform-specific input arguments
+	switch platform {
+	case "darwin": // macOS
+		a.logger.Info("🍎 Using macOS avfoundation audio input")
+		args = append(args,
+			"-f", "avfoundation",
+			"-i", ":0", // Default audio input device
+		)
+	case "linux": // Linux
+		if a.isAudioSystemAvailable("pulse") {
+			a.logger.Info("🔊 Using PulseAudio input")
+			args = append(args,
+				"-f", "pulse",
+				"-i", "default", // Default PulseAudio source
+			)
+		} else if a.isAudioSystemAvailable("alsa") {
+			a.logger.Info("🔉 Using ALSA audio input")
+			args = append(args,
+				"-f", "alsa",
+				"-i", "hw:0", // Hardware device 0
+			)
+		} else {
+			a.logger.Warn("❌ No supported audio system found (pulse/alsa)")
+			return nil
+		}
+	default:
+		a.logger.Warn("Unsupported platform for audio recording")
+		return nil
+	}
+
+	// Output arguments
+	args = append(args, a.AudioFilePath)
+
+	return args
+}
+
+// detectPlatform detects the current operating system
+func (a *AudioRecorder) detectPlatform() string {
+	cmd := exec.Command("uname", "-s")
+	output, err := cmd.Output()
+	if err != nil {
+		a.logger.Warn("Failed to detect platform", "error", err)
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimSpace(string(output)))
+}
+
+// isAudioSystemAvailable checks if a specific audio system is available
+func (a *AudioRecorder) isAudioSystemAvailable(system string) bool {
+	switch system {
+	case "pulse":
+		// Check if PulseAudio is running
+		cmd := exec.Command("pulseaudio", "--check")
+		return cmd.Run() == nil
+	case "alsa":
+		// Check if ALSA devices exist
+		_, err := os.Stat("/proc/asound/devices")
+		return err == nil
+	default:
+		return false
+	}
 }
 
 // createDummyAudioFile creates a dummy audio file for testing purposes

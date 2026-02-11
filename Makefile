@@ -39,7 +39,18 @@ build: init-work
 	@go mod download
 	@go mod tidy
 	@echo "   ✅ Dependencies updated"
-	@go build $(BUILD_FLAGS) -o $(BINARY_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	@if [ "$$(uname -m)" = "aarch64" ] && [ -f /proc/cpuinfo ] && grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then \
+		echo "🍓 Detected Raspberry Pi - using ARM64 build settings"; \
+		CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go build $(BUILD_FLAGS) -o $(BINARY_DIR)/$(BINARY_NAME) ./$(CMD_DIR); \
+	elif [ "$$(uname -m)" = "aarch64" ]; then \
+		echo "🔧 Detected ARM64 - using compatible build settings"; \
+		CGO_ENABLED=0 GOARCH=arm64 GOOS=linux go build $(BUILD_FLAGS) -o $(BINARY_DIR)/$(BINARY_NAME) ./$(CMD_DIR); \
+	elif [ "$$(uname -m)" = "armv7l" ]; then \
+		echo "🔧 Detected ARM 32-bit - using compatible build settings"; \
+		CGO_ENABLED=0 GOARCH=arm GOOS=linux go build $(BUILD_FLAGS) -o $(BINARY_DIR)/$(BINARY_NAME) ./$(CMD_DIR); \
+	else \
+		go build $(BUILD_FLAGS) -o $(BINARY_DIR)/$(BINARY_NAME) ./$(CMD_DIR); \
+	fi
 	@echo "✅ Build complete: $(BINARY_DIR)/$(BINARY_NAME)"
 
 # Clean everything - removes entire work directory
@@ -196,7 +207,8 @@ release:
 	@echo "🚀 Building release binaries..."
 	@mkdir -p release
 	@GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
-	@GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-linux-arm64 ./$(CMD_DIR)
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-linux-arm64 ./$(CMD_DIR)
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-linux-arm ./$(CMD_DIR)
 	@GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-darwin-amd64 ./$(CMD_DIR)
 	@GOOS=darwin GOARCH=arm64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-darwin-arm64 ./$(CMD_DIR)
 	@GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o release/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
@@ -218,11 +230,18 @@ help:
 	@echo "  run-verbose   Run with verbose logging"
 	@echo "  dev           Run in development mode with hot reload"
 	@echo ""
+	@echo "🎯 All-in-One Commands:"
+	@echo "  all-run       Complete setup and run (auto-detects hardware)"
+	@echo "  all-run-verbose Complete setup and run with verbose output"
+	@echo ""
 	@echo "📦 Dependencies:"
 	@echo "  deps          Install and update Go dependencies"
 	@echo "  init-work     Initialize work directory structure"
-	@echo "  setup-whisper Setup whisper.cpp for speech recognition"
 	@echo "  setup-env     Create .env configuration file"
+	@echo ""
+	@echo "🎤 Speech Recognition Setup:"
+	@echo "  setup-whisper Setup whisper.cpp (auto-detects hardware)"
+	@echo "  setup-whisper-verbose Setup whisper.cpp with verbose output"
 	@echo ""
 	@echo "🧪 Quality Assurance:"
 	@echo "  test          Run tests"

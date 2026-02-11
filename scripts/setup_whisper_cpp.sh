@@ -156,6 +156,50 @@ clone_whisper_cpp() {
     fi
 }
 
+# Detect hardware and return appropriate cmake flags
+detect_hardware_flags() {
+    local CMAKE_FLAGS=""
+    local ARCH=$(uname -m)
+
+    # Check if we're on Raspberry Pi ARM64
+    if [ "$ARCH" = "aarch64" ] && [ -f /proc/cpuinfo ]; then
+        if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
+            # Raspberry Pi ARM64 - optimized for Cortex-A72
+            CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DWHISPER_NO_AVX=ON -DWHISPER_NO_AVX2=ON -DWHISPER_NO_FMA=ON -DWHISPER_NO_F16C=ON -DCMAKE_CXX_FLAGS=\"-mcpu=cortex-a72 -mtune=cortex-a72 -O3\" -DCMAKE_EXE_LINKER_FLAGS=\"-latomic\""
+        else
+            # Generic ARM64, but not RPi
+            CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DWHISPER_NO_AVX=ON -DWHISPER_NO_AVX2=ON -DWHISPER_NO_FMA=ON -DWHISPER_NO_F16C=ON -DCMAKE_EXE_LINKER_FLAGS=\"-latomic\""
+        fi
+    elif [ "$ARCH" = "armv7l" ]; then
+        # 32-bit ARM (older RPi)
+        CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DWHISPER_NO_AVX=ON -DWHISPER_NO_AVX2=ON -DWHISPER_NO_FMA=ON -DWHISPER_NO_F16C=ON -DCMAKE_EXE_LINKER_FLAGS=\"-latomic\""
+    else
+        # x86_64 or other architectures - use default
+        CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release"
+    fi
+
+    echo "$CMAKE_FLAGS"
+}
+
+# Detect hardware type and show appropriate message
+show_hardware_detection() {
+    local ARCH=$(uname -m)
+
+    if [ "$VERBOSE" = true ]; then
+        if [ "$ARCH" = "aarch64" ] && [ -f /proc/cpuinfo ]; then
+            if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
+                echo "🍓 Detected Raspberry Pi ARM64 - using optimized flags"
+            else
+                echo "🔧 Detected ARM64 - using compatible flags"
+            fi
+        elif [ "$ARCH" = "armv7l" ]; then
+            echo "🔧 Detected ARM 32-bit - using compatible flags"
+        else
+            echo "🔧 Using standard build configuration for $ARCH"
+        fi
+    fi
+}
+
 # Build whisper.cpp
 build_whisper_cpp() {
     echo "   🔨 Building whisper.cpp..."
@@ -185,15 +229,30 @@ build_whisper_cpp() {
         CORES=4
     fi
 
+    # Show hardware detection message
+    show_hardware_detection
+
+    # Get hardware-specific cmake flags
+    local CMAKE_FLAGS=$(detect_hardware_flags)
+
     if [ "$VERBOSE" = true ]; then
         # Configure and build with full output
         echo "🔧 Building with $CORES cores..."
-        cmake ..
+        if [ -n "$CMAKE_FLAGS" ]; then
+            echo "🎛️  Using flags: $CMAKE_FLAGS"
+            eval "cmake .. $CMAKE_FLAGS"
+        else
+            cmake ..
+        fi
         make -j$CORES
         echo "✅ whisper.cpp built successfully"
     else
         # Silent build
-        cmake .. >/dev/null 2>&1
+        if [ -n "$CMAKE_FLAGS" ]; then
+            eval "cmake .. $CMAKE_FLAGS" >/dev/null 2>&1
+        else
+            cmake .. >/dev/null 2>&1
+        fi
         make -j$CORES >/dev/null 2>&1
     fi
 

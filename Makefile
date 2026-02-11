@@ -17,8 +17,8 @@ GO_FILES=$(shell find . -name "*.go" -type f)
 all: setup-whisper build
 all-run: header setup-whisper build separator run
 all-run-verbose: header setup-whisper-verbose build separator run
-all-setup-rpi: header setup-whisper setup-gcloud setup-env build separator
-all-setup-rpi-verbose: header setup-whisper-verbose setup-gcloud setup-env build separator
+all-setup-rpi: header setup-whisper setup-gcloud setup-tts setup-env build separator
+all-setup-rpi-verbose: header setup-whisper-verbose setup-gcloud setup-tts setup-env build separator
 
 # Header for all-run command
 header:
@@ -218,12 +218,12 @@ setup-gcloud:
 		echo "   ✅ gcloud CLI already installed"; \
 	fi
 	@echo ""
-	@echo "📝 Step 2: Authentication & Project Setup"
-	@echo "🔑 Starting interactive authentication..."
+	@echo "📝 Step 2: Google Account Authentication"
+	@echo "🔑 Starting Google account login..."
 	@echo "   This will open a browser window for Google authentication."
 	@echo "   If you're on a headless system, you'll get a URL to copy."
 	@echo ""
-	@gcloud auth application-default login
+	@gcloud auth login
 	@echo ""
 	@echo "📝 Step 3: Project Configuration"
 	@read -p "Enter your Google Cloud Project ID: " PROJECT_ID; \
@@ -245,15 +245,24 @@ setup-gcloud:
 		echo "⚠️  Skipping API enablement - no project configured"; \
 	fi
 	@echo ""
-	@echo "📝 Step 5: Testing authentication..."
+	@echo "📝 Step 5: Application Default Credentials"
+	@echo "🔑 Setting up Application Default Credentials for Bobo..."
+	@echo "   This may open another browser window or reuse your session."
+	@echo ""
+	@gcloud auth application-default login
+	@echo ""
+	@echo "📝 Step 6: Testing authentication..."
 	@$(MAKE) test-auth-verbose
 	@echo ""
 	@echo "🎉 Google Cloud CLI setup complete!"
 	@echo ""
 	@echo "📋 Next steps:"
-	@echo "  1. If authentication failed, run: gcloud auth application-default login"
-	@echo "  2. Update .env with your project ID"
-	@echo "  3. Run: make all-run"
+	@echo "  1. Update .env with your project ID if needed"
+	@echo "  2. Run: make all-run"
+	@echo ""
+	@echo "🔧 If you get authentication errors later:"
+	@echo "  - Account login: gcloud auth login"
+	@echo "  - App credentials: gcloud auth application-default login"
 	@echo ""
 
 # Test authentication with Google Cloud
@@ -261,6 +270,66 @@ test-auth:
 	@echo "🔐 Testing Google Cloud authentication..."
 	@gcloud auth application-default print-access-token >/dev/null && echo "✅ Authentication OK" || echo "❌ Authentication failed"
 	@echo "Project: $$(gcloud config get-value project 2>/dev/null || echo 'Not set')"
+
+# Install Text-to-Speech system for multiple platforms
+setup-tts:
+	@echo "🔊 Installing Text-to-Speech system..."
+	@echo ""
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		echo "🍎 Detected macOS system"; \
+		if command -v brew >/dev/null 2>&1; then \
+			echo "🔧 Installing espeak via Homebrew..."; \
+			brew install espeak; \
+			echo "✅ TTS system installed via Homebrew"; \
+		else \
+			echo "❌ Homebrew not found. Installing Homebrew first..."; \
+			echo "🔧 Installing Homebrew..."; \
+			/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; \
+			echo "🔧 Installing espeak..."; \
+			brew install espeak; \
+			echo "✅ TTS system installed"; \
+		fi; \
+	elif command -v apt-get >/dev/null 2>&1; then \
+		echo "📦 Detected Debian/Ubuntu system"; \
+		echo "🔧 Installing espeak and espeak-data..."; \
+		sudo apt-get update -qq; \
+		sudo apt-get install -y espeak espeak-data; \
+		echo "✅ TTS system installed"; \
+	elif command -v yum >/dev/null 2>&1; then \
+		echo "📦 Detected RHEL/CentOS system"; \
+		echo "🔧 Installing espeak..."; \
+		sudo yum install -y espeak espeak-devel; \
+		echo "✅ TTS system installed"; \
+	elif command -v dnf >/dev/null 2>&1; then \
+		echo "📦 Detected Fedora system"; \
+		echo "🔧 Installing espeak..."; \
+		sudo dnf install -y espeak espeak-devel; \
+		echo "✅ TTS system installed"; \
+	elif command -v pacman >/dev/null 2>&1; then \
+		echo "📦 Detected Arch Linux system"; \
+		echo "🔧 Installing espeak..."; \
+		sudo pacman -S --needed espeak espeak-data; \
+		echo "✅ TTS system installed"; \
+	else \
+		echo "❌ Unsupported system or package manager"; \
+		echo "Please install TTS manually:"; \
+		echo "  - macOS: brew install espeak"; \
+		echo "  - Debian/Ubuntu: sudo apt install espeak espeak-data"; \
+		echo "  - RHEL/CentOS: sudo yum install espeak espeak-devel"; \
+		echo "  - Arch: sudo pacman -S espeak espeak-data"; \
+	fi
+	@echo ""
+	@echo "🧪 Testing TTS installation..."
+	@if command -v espeak >/dev/null 2>&1; then \
+		echo "📢 Testing espeak TTS..."; \
+		echo "Hello from Bobo! Espeak text-to-speech is working." | espeak >/dev/null 2>&1 && \
+		echo "✅ espeak TTS test successful" || echo "⚠️  espeak installed but test failed"; \
+	else \
+		echo "❌ No espeak TTS system found after installation"; \
+	fi
+	@echo ""
+	@echo "🎉 TTS setup complete!"
+	@echo "Now run 'make run' and try the 'x' command to test voice output."
 
 # Test authentication with verbose output
 test-auth-verbose:
@@ -360,6 +429,9 @@ help:
 	@echo "  install-gcloud Install Google Cloud CLI only"
 	@echo "  setup-gcloud  Complete Google Cloud CLI setup and authentication"
 	@echo "  test-auth     Test Google Cloud authentication"
+	@echo ""
+	@echo "🔊 Text-to-Speech:"
+	@echo "  setup-tts     Install and configure TTS system (espeak)"
 	@echo ""
 	@echo "💡 Development Tools:"
 	@echo "  air           Hot reload (go install github.com/air-verse/air@latest)"

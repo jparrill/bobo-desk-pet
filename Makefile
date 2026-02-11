@@ -17,6 +17,8 @@ GO_FILES=$(shell find . -name "*.go" -type f)
 all: setup-whisper build
 all-run: header setup-whisper build separator run
 all-run-verbose: header setup-whisper-verbose build separator run
+all-setup-rpi: header setup-whisper setup-gcloud setup-env build separator
+all-setup-rpi-verbose: header setup-whisper-verbose setup-gcloud setup-env build separator
 
 # Header for all-run command
 header:
@@ -177,11 +179,102 @@ setup-env:
 		echo "⚠️ .env file already exists"; \
 	fi
 
+# Install Google Cloud CLI only
+install-gcloud:
+	@echo "📥 Installing Google Cloud CLI..."
+	@if ! command -v gcloud >/dev/null 2>&1; then \
+		echo "   🔄 Downloading and installing..."; \
+		curl https://sdk.cloud.google.com | bash; \
+		echo "export PATH=\$$HOME/google-cloud-sdk/bin:\$$PATH" >> ~/.bashrc; \
+		echo "export PATH=\$$HOME/google-cloud-sdk/bin:\$$PATH" >> ~/.zshrc 2>/dev/null || true; \
+		echo ""; \
+		echo "✅ Google Cloud CLI installed"; \
+		echo "🔄 Please restart your shell or run:"; \
+		echo "   source ~/.bashrc"; \
+		echo "   export PATH=\$$HOME/google-cloud-sdk/bin:\$$PATH"; \
+		echo ""; \
+		echo "Then run: make setup-gcloud"; \
+	else \
+		echo "✅ gcloud CLI already installed"; \
+	fi
+
+# Bootstrap Google Cloud CLI and authentication
+setup-gcloud:
+	@echo ""
+	@echo "🔐 Google Cloud CLI Setup & Authentication"
+	@echo "=========================================="
+	@echo ""
+	@echo "📝 Step 1: Installing Google Cloud CLI..."
+	@if ! command -v gcloud >/dev/null 2>&1; then \
+		echo "   📥 Downloading and installing gcloud CLI..."; \
+		curl https://sdk.cloud.google.com | bash; \
+		echo "   🔄 Attempting to reload shell configuration..."; \
+		echo "export PATH=\$$HOME/google-cloud-sdk/bin:\$$PATH" >> ~/.bashrc; \
+		echo "export PATH=\$$HOME/google-cloud-sdk/bin:\$$PATH" >> ~/.zshrc 2>/dev/null || true; \
+		export PATH=$$HOME/google-cloud-sdk/bin:$$PATH; \
+		echo "   ✅ gcloud CLI installation completed"; \
+		echo "   ⚠️  If 'gcloud' is not found, restart your shell and run this again"; \
+	else \
+		echo "   ✅ gcloud CLI already installed"; \
+	fi
+	@echo ""
+	@echo "📝 Step 2: Authentication & Project Setup"
+	@echo "🔑 Starting interactive authentication..."
+	@echo "   This will open a browser window for Google authentication."
+	@echo "   If you're on a headless system, you'll get a URL to copy."
+	@echo ""
+	@gcloud auth application-default login
+	@echo ""
+	@echo "📝 Step 3: Project Configuration"
+	@read -p "Enter your Google Cloud Project ID: " PROJECT_ID; \
+	if [ -n "$$PROJECT_ID" ]; then \
+		echo "🔧 Setting project to: $$PROJECT_ID"; \
+		gcloud config set project $$PROJECT_ID; \
+		echo "✅ Project configured"; \
+	else \
+		echo "⚠️  No project ID provided. You can set it later with:"; \
+		echo "   gcloud config set project YOUR_PROJECT_ID"; \
+	fi
+	@echo ""
+	@echo "📝 Step 4: Enabling required APIs..."
+	@if gcloud config get-value project >/dev/null 2>&1; then \
+		echo "🔧 Enabling Vertex AI API..."; \
+		gcloud services enable aiplatform.googleapis.com --quiet; \
+		echo "✅ APIs enabled"; \
+	else \
+		echo "⚠️  Skipping API enablement - no project configured"; \
+	fi
+	@echo ""
+	@echo "📝 Step 5: Testing authentication..."
+	@$(MAKE) test-auth-verbose
+	@echo ""
+	@echo "🎉 Google Cloud CLI setup complete!"
+	@echo ""
+	@echo "📋 Next steps:"
+	@echo "  1. If authentication failed, run: gcloud auth application-default login"
+	@echo "  2. Update .env with your project ID"
+	@echo "  3. Run: make all-run"
+	@echo ""
+
 # Test authentication with Google Cloud
 test-auth:
 	@echo "🔐 Testing Google Cloud authentication..."
 	@gcloud auth application-default print-access-token >/dev/null && echo "✅ Authentication OK" || echo "❌ Authentication failed"
 	@echo "Project: $$(gcloud config get-value project 2>/dev/null || echo 'Not set')"
+
+# Test authentication with verbose output
+test-auth-verbose:
+	@echo "🔐 Testing Google Cloud authentication..."
+	@if gcloud auth application-default print-access-token >/dev/null 2>&1; then \
+		echo "✅ Authentication: OK"; \
+		echo "🏗️  Project: $$(gcloud config get-value project 2>/dev/null || echo 'Not configured')"; \
+		echo "👤 Account: $$(gcloud config get-value account 2>/dev/null || echo 'Not configured')"; \
+	else \
+		echo "❌ Authentication: FAILED"; \
+		echo ""; \
+		echo "🔧 To fix, run:"; \
+		echo "   gcloud auth application-default login"; \
+	fi
 
 # Run security scan
 security:
@@ -234,6 +327,10 @@ help:
 	@echo "  all-run       Complete setup and run (auto-detects hardware)"
 	@echo "  all-run-verbose Complete setup and run with verbose output"
 	@echo ""
+	@echo "🍓 Raspberry Pi Setup:"
+	@echo "  all-setup-rpi Complete Raspberry Pi setup (whisper + gcloud + config)"
+	@echo "  all-setup-rpi-verbose Complete RPi setup with verbose output"
+	@echo ""
 	@echo "📦 Dependencies:"
 	@echo "  deps          Install and update Go dependencies"
 	@echo "  init-work     Initialize work directory structure"
@@ -260,6 +357,8 @@ help:
 	@echo "  test-auto     Automated input test (verifies fixes)"
 	@echo ""
 	@echo "🔧 Authentication:"
+	@echo "  install-gcloud Install Google Cloud CLI only"
+	@echo "  setup-gcloud  Complete Google Cloud CLI setup and authentication"
 	@echo "  test-auth     Test Google Cloud authentication"
 	@echo ""
 	@echo "💡 Development Tools:"
